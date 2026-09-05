@@ -11,8 +11,12 @@ import { z } from 'zod'
  * the platform owns, so switching one off cannot collide with a settings field and cannot be dropped
  * by a settings round-trip.
  *
- * Nothing reads this yet. It is the shape `meet.config.get` answers from and the ceiling the join
- * path is held to, both of which arrive with the server.
+ * **Declared here and deliberately not passed to `defineModule` yet.** `defineModule({ settings })`
+ * is what puts a field on a workspace's module settings screen, and nothing reads this number: a
+ * form control that changes nothing teaches an administrator that the settings screen does not mean
+ * anything, which is the same failure as a capability nothing checks. The shape exists so that the
+ * procedure which answers it and the grant which is held to it read one definition rather than two;
+ * it is registered on the module in the commit that reads it. `module.test.ts` pins that.
  */
 export const MeetSettings = z.object({
   /**

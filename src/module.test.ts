@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { baseContract } from '@kernhq/contracts'
-import { type Kernel, requires, requiresCapability, workspaceScoped } from '@kernhq/kernel'
+import { type Kernel, requires, requiresCapability, toManifest, workspaceScoped } from '@kernhq/kernel'
 import { implement } from '@orpc/server'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -421,6 +421,24 @@ describe('the module is inert until an administrator asks for it', () => {
 
   it('declares no capability that is on for a workspace which never touched the switchboard', () => {
     expect(meetCapabilities.filter((c) => c.defaultEnabled).map((c) => c.id)).toEqual([])
+  })
+
+  it('puts no field on the module settings screen while nothing reads one', () => {
+    /*
+     * `MeetSettings` is declared and deliberately not handed to `defineModule`. Passing it is what
+     * renders `maxParticipants` on a workspace's settings screen, and nothing reads that number
+     * yet — a control that changes nothing is the same lie as a capability nothing checks.
+     *
+     * Delete this test in the commit that adds `meet.config.get`, which is the thing that reads it.
+     *
+     * Asserted through `toManifest`, because that is where the field a screen renders is actually
+     * produced: `ModuleDefinition` carries `settings` and only the **manifest** carries
+     * `settingsSchema`. Reading `definition.settingsSchema` — which does not exist — passed happily
+     * with `settings: MeetSettings` registered, which is the vacuous shape this whole file is
+     * written to avoid. Both are asserted now, so neither can drift alone.
+     */
+    expect(meetModule.definition.settings, 'nothing reads a setting yet').toBeUndefined()
+    expect(toManifest(meetModule.definition).settingsSchema, 'so core renders no form').toBeUndefined()
   })
 
   it('declares the two capabilities every later surface has to name', () => {

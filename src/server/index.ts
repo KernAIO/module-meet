@@ -28,6 +28,9 @@ export const meetModule = defineServerModule({
     permissions: meetPermissions,
     capabilities: meetCapabilities,
     events: meetEvents,
+    // `settings: MeetSettings` is deliberately absent: it is what renders a field on a workspace's
+    // module settings screen, and nothing reads `maxParticipants` yet. It is registered in the
+    // commit that reads it, and `module.test.ts` pins that until then.
   }),
   schema,
   migrationsFolder: join(dirname(fileURLToPath(import.meta.url)), '../../migrations'),
