@@ -1,5 +1,11 @@
 # @kernhq/module-meet
 
+## 0.2.2
+
+### Patch Changes
+
+- test: assert the settings field through the manifest, not the definition
+
 ## 0.2.1
 
 ### Patch Changes
