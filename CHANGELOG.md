@@ -1,5 +1,11 @@
 # @kernhq/module-meet
 
+## 0.2.1
+
+### Patch Changes
+
+- docs: describe what the package holds rather than calling it a skeleton
+
 ## 0.2.0
 
 ### Minor Changes
