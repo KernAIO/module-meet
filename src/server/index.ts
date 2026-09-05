@@ -7,22 +7,23 @@ import { schema } from './schema.js'
 /**
  * The meetings module, as a host service sees it.
  *
- * It is registered nowhere yet — not in `core`'s `featureModules`, not in the app shell — and it
- * declares no contract, no router, no permissions and no capabilities. Importing it costs a host an
- * empty `mod_meet` schema and nothing else.
+ * It is registered nowhere — not in `core`'s `featureModules`, not in the app shell — and it mounts
+ * no router, so importing it costs a host the four tables in `mod_meet` and no API surface at all.
  *
- * That is on purpose, and it is the safest state to leave this in: `isEnabled` in core answers
- * `row?.enabled ?? true`, so a module added to an image is switched **on** in every workspace on
- * every instance the night it rolls out. Until this module has capabilities that default to off and
- * a screen behind each one, a workspace that has never heard of meetings must not be able to reach
- * anything here.
+ * That is the safest state to leave this in, and the reason is worth having in front of whoever
+ * wires it up next. `isEnabled` in core answers `row?.enabled ?? true`, so a module added to an
+ * image is switched **on** in every workspace on every instance the night it rolls out — including
+ * workspaces created long before the module existed. The two capabilities this module declares both
+ * default to off and neither is `required`, which is what keeps the feature inert until an
+ * administrator asks for it; every surface added from here on names one of them, or it is a nav item
+ * that appears unannounced and fails on click.
  */
 export const meetModule = defineServerModule({
   definition: defineModule({
     id: MODULE_ID,
     name: 'Meetings',
     version: packageVersion(import.meta.url),
-    description: 'Meetings for Kern — not built yet',
+    description: 'Audio and video calls for Kern — the schema and the contract; no procedures yet',
     icon: 'video',
     permissions: meetPermissions,
     capabilities: meetCapabilities,

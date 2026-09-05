@@ -57,7 +57,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && svelte-check --tsconfig ./tsconfig.client.json --threshold error",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "lint": "biome check . && node scripts/check-ranges.mjs package.json",
+    "lint": "biome check . && node scripts/check-ranges.mjs package.json && node scripts/check-snapshot-drift.mjs",
     "format": "biome check --write .",
     "changeset": "changeset"
   },
@@ -78,7 +78,9 @@
     "@kernhq/ui": "^0.14.0",
     "@tanstack/svelte-query": "^6.1.0",
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
     "drizzle-kit": "^0.31.0",
+    "pg": "^8.16.0",
     "svelte": "^5.46.0",
     "svelte-check": "^4.0.0",
     "typescript": "~5.9.3",

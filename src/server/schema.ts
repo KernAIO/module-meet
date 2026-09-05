@@ -1,19 +1,262 @@
 import { moduleSchema } from '@kernhq/kernel'
+import { sql } from 'drizzle-orm'
+import { check, index, integer, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 /**
  * This module's tables, in its own Postgres schema (`mod_meet`).
  *
- * Two rules apply to every table added here, neither optional:
+ * Two rules apply to every table here, neither optional:
  *
  * - every tenant table carries `workspace_id` and an index that starts with it;
  * - every tenant table gets a row-level security policy, hand-written in the migration, because
  *   drizzle-kit does not generate one. RLS is the last line — the API check is the first, and
  *   somebody will eventually write a query that skips it.
  *
- * There are no tables yet. The schema object exists so `migrationsFolder` has something to belong
- * to and so the first migration has somewhere to land.
+ * Three traps have each cost this project a host service that would not boot, and all three are
+ * shaped so that a reading of the code cannot tell the right version from the wrong one:
+ *
+ * 1. **A composite key is `primaryKey({ columns: [...] })` in the table's second argument.** Two
+ *    column-level `.primaryKey()` calls read like a compound key and are not one — drizzle emits
+ *    `PRIMARY KEY` on both columns and Postgres refuses the table with 42P16.
+ * 2. **A descending index column is `t.startedAt.desc()`, never `desc(t.startedAt)`.** The second is
+ *    the *query* helper: drizzle records it in the snapshot as a SQL expression, which Postgres will
+ *    not build, while the emitted `CREATE INDEX` is valid either way — so the database is right and
+ *    the snapshot is wrong for ever. `scripts/check-snapshot-drift.mjs` is what catches it.
+ * 3. **Anything that must survive a replay goes *inside* `CREATE TABLE`**, where it inherits the
+ *    `IF NOT EXISTS` guard, rather than into a bare `ALTER TABLE … ADD CONSTRAINT`. That is why the
+ *    enum-shaped columns below use drizzle's `check()` rather than a hand-written constraint.
  */
 export const schema = moduleSchema('meet')
 
-/** Every tenant table, so the RLS migration can be checked against one list rather than memory. */
-export const TENANT_TABLES = [] as const
+/** Local column factories, so the conventions stay in one place. */
+const id = () => uuid('id').primaryKey().default(sql`uuidv7()`)
+const ws = () => uuid('workspace_id').notNull()
+const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' })
+/** A timestamp that is always set: `now()` at insert, and never null afterwards. */
+const stamped = (name: string) => ts(name).notNull().defaultNow()
+const created = () => stamped('created_at')
+const updated = () => stamped('updated_at')
+
+/**
+ * A persistent place. It is there whether or not anybody is in it, and entering rings nobody.
+ *
+ * Every room in this release is open to the whole workspace. Invite-only rooms would need a member
+ * table and a different way of publishing occupancy — the realtime object channel is authorised on
+ * workspace membership alone, so a private room's roster would be readable by anybody in the
+ * workspace — and both are deferred rather than half-built.
+ */
+export const rooms = schema.table(
+  'rooms',
+  {
+    id: id(),
+    workspaceId: ws(),
+    /** URL segment. Lowercase by construction, so two rooms cannot differ only in case. */
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    createdBy: uuid('created_by'),
+    /**
+     * Archived rather than deleted, because `meetings.room_id` points here with no foreign key — a
+     * module keeps its joins inside its own schema and its ids plain. Deleting a room would leave
+     * every past meeting held in it pointing at nothing, so a year of history would lose the word
+     * "Standup" the day somebody tidied up the rooms page.
+     */
+    archivedAt: ts('archived_at'),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    /**
+     * Unique across archived rows too: two rooms with the same slug, one of them archived, is two
+     * rows a URL cannot tell apart the moment somebody restores the second.
+     */
+    uniqueIndex('meet_rooms_ws_slug_uq').on(t.workspaceId, t.slug),
+    index('meet_rooms_ws_idx').on(t.workspaceId, t.name),
+  ],
+)
+
+/**
+ * One occurrence: a call that is happening, or one that happened.
+ *
+ * The two partial unique indexes here are the module's central invariant, and they are the reason
+ * two people pressing Huddle in the same second land in **one** call rather than two. Both are
+ * enforced by Postgres rather than by a read-then-write in the service, because a check-then-insert
+ * loses that race by construction: both requests read "no live meeting", both insert, and the two
+ * people are then sitting in different rooms wondering where the other one is.
+ */
+export const meetings = schema.table(
+  'meetings',
+  {
+    id: id(),
+    workspaceId: ws(),
+    /** `direct` | `huddle` | `room`. Set once, when the row is written. */
+    kind: text('kind').notNull(),
+    /**
+     * The name LiveKit knows this meeting by, unique across the whole instance because LiveKit's
+     * room namespace is not per workspace. Generated by the server, never taken from a request: a
+     * room name a caller can choose is a room name a caller can collide with somebody else's.
+     */
+    livekitRoom: text('livekit_room').notNull(),
+    /** Set only when `kind = 'room'`. No foreign key; a module keeps its joins inside its schema. */
+    roomId: uuid('room_id'),
+    /** The three columns of an object reference, set together only when `kind = 'huddle'`. */
+    objectModule: text('object_module'),
+    objectType: text('object_type'),
+    objectId: text('object_id'),
+    title: text('title'),
+    startedBy: uuid('started_by').notNull(),
+    startedAt: stamped('started_at'),
+    endedAt: ts('ended_at'),
+    /** `empty` | `ended_by_host` | `reconciled` | `expired`, so history says more than "it ended". */
+    endedReason: text('ended_reason'),
+    /** The most people in it at once. Written by the webhook, which is the only honest counter. */
+    peakParticipants: integer('peak_participants').notNull().default(0),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    /**
+     * One LiveKit room, one meeting row. Total rather than partial: a room name is reused by
+     * nothing, and a second row claiming the same name would make the webhook's lookup a coin toss.
+     */
+    uniqueIndex('meet_meetings_livekit_room_uq').on(t.livekitRoom),
+    /**
+     * **One live meeting per room.** Partial over `ended_at is null`, which is what lets a room hold
+     * a thousand past meetings and at most one present one — a total unique index on `room_id`
+     * would refuse the second standup ever held.
+     *
+     * `room_id is not null` keeps direct calls and huddles out of it entirely. Postgres treats
+     * nulls as distinct in a unique index, so they would not actually collide; naming the predicate
+     * says the invariant is about rooms rather than relying on that.
+     */
+    uniqueIndex('meet_meetings_room_live_uq')
+      .on(t.roomId)
+      .where(sql`ended_at is null and room_id is not null`),
+    /**
+     * **One live huddle per object.** The index that makes two people pressing Huddle at the same
+     * moment land in the same call: the second insert loses on a unique violation and the service
+     * reads the winner's row back rather than starting a second meeting.
+     *
+     * Scoped by `workspace_id` as well as by the object, because `object_id` is another module's
+     * identifier and this module cannot promise it is unique across workspaces.
+     */
+    uniqueIndex('meet_meetings_object_live_uq')
+      .on(t.workspaceId, t.objectModule, t.objectType, t.objectId)
+      .where(sql`ended_at is null and object_id is not null`),
+    /**
+     * History, newest first — the only order anybody reads a list of past meetings in.
+     *
+     * `t.startedAt.desc()` and never `desc(t.startedAt)`: they read identically, both emit a valid
+     * `CREATE INDEX`, and only the first is an index definition. The second is the query helper, so
+     * drizzle writes `("started_at" desc)` into the snapshot as an expression Postgres will not
+     * build — the migration applies, the database is right, and `db:generate` proposes this index
+     * again for ever.
+     */
+    index('meet_meetings_ws_started_idx').on(t.workspaceId, t.startedAt.desc()),
+    /** "What is live in this workspace right now" — the rooms page and the reconciler both ask it. */
+    index('meet_meetings_ws_live_idx').on(t.workspaceId).where(sql`ended_at is null`),
+    /**
+     * Inline in `CREATE TABLE`, so it inherits the `IF NOT EXISTS` guard. A bare
+     * `ALTER TABLE … ADD CONSTRAINT` is not idempotent and a replay of it takes down every module in
+     * the host service, not only this one.
+     */
+    check('meet_meetings_kind_ck', sql`${t.kind} in ('direct','huddle','room')`),
+    check(
+      'meet_meetings_ended_reason_ck',
+      sql`${t.endedReason} is null or ${t.endedReason} in ('empty','ended_by_host','reconciled','expired')`,
+    ),
+  ],
+)
+
+/**
+ * Somebody's attendance of one meeting.
+ *
+ * Written by the LiveKit webhook and by the reconciliation sweep, **never by a browser**. A client
+ * that reports its own attendance reports it wrong the moment it crashes, and a row claiming
+ * somebody is still in a call they left is worse than no row at all — it is what puts a face on the
+ * rooms page belonging to a person who went home an hour ago.
+ */
+export const participants = schema.table(
+  'participants',
+  {
+    id: id(),
+    workspaceId: ws(),
+    meetingId: uuid('meeting_id').notNull(),
+    /** LiveKit's participant identity is fixed to the Kern user id when the token is minted. */
+    userId: uuid('user_id').notNull(),
+    joinedAt: stamped('joined_at'),
+    leftAt: ts('left_at'),
+  },
+  (t) => [
+    /**
+     * **One live participant row per person per meeting.** Partial over `left_at is null`, so a
+     * person who drops off a flaky connection and rejoins four times has four rows in the history
+     * and at most one open one — which is what makes an occupancy count a count rather than an
+     * over-count.
+     *
+     * It is also what lets the webhook insert with `on conflict do nothing`: LiveKit retries a
+     * delivery it did not get a 2xx for, so the same `participant_joined` arrives twice as a matter
+     * of routine.
+     */
+    uniqueIndex('meet_participants_live_uq').on(t.meetingId, t.userId).where(sql`left_at is null`),
+    index('meet_participants_ws_meeting_idx').on(t.workspaceId, t.meetingId),
+    /** "Which meetings was Ada in" — the history list, newest first. */
+    index('meet_participants_ws_user_idx').on(t.workspaceId, t.userId, t.joinedAt.desc()),
+  ],
+)
+
+/**
+ * One ring, made durable.
+ *
+ * A ring that exists only as a realtime message is a call a reconnect can lose: the socket drops
+ * between the caller pressing Call and the callee's browser subscribing, and afterwards nothing
+ * anywhere knows a call was attempted. The row is what a client re-reads on mount and on every
+ * reconnect, and what a sweep ages into a missed call somebody can ring back from.
+ */
+export const invites = schema.table(
+  'invites',
+  {
+    id: id(),
+    workspaceId: ws(),
+    meetingId: uuid('meeting_id').notNull(),
+    fromUserId: uuid('from_user_id').notNull(),
+    toUserId: uuid('to_user_id').notNull(),
+    /** `ringing` | `answered` | `declined` | `cancelled` | `missed`. Only the first is not final. */
+    state: text('state').notNull().default('ringing'),
+    /**
+     * When the ring stops being a ring. The client counts down to this and closes its own sheet, so
+     * a lost cancellation cannot leave a phone ringing for ever; the sweep uses it to write the
+     * missed call.
+     */
+    expiresAt: ts('expires_at').notNull(),
+    /** Stamped when `state` stops being `ringing`, so "how long did it ring" is answerable. */
+    resolvedAt: ts('resolved_at'),
+    createdAt: created(),
+  },
+  (t) => [
+    /**
+     * One ring per person per meeting. Total rather than partial: ringing the same person twice for
+     * the same call is a duplicate rather than a second attempt, and a second attempt is a second
+     * meeting.
+     */
+    uniqueIndex('meet_invites_meeting_user_uq').on(t.meetingId, t.toUserId),
+    /** What the callee's client asks for on mount and on every reconnect: "am I being rung?" */
+    index('meet_invites_ws_to_state_idx').on(t.workspaceId, t.toUserId, t.state),
+    /**
+     * What the expiry sweep asks for: every ring past its time, across every workspace. It runs
+     * unbound (`app.workspace_id = '*'`), so this index deliberately does not start with
+     * `workspace_id` — an index that did could not answer the sweep's question at all.
+     */
+    index('meet_invites_expiry_idx').on(t.state, t.expiresAt),
+    check('meet_invites_state_ck', sql`${t.state} in ('ringing','answered','declined','cancelled','missed')`),
+  ],
+)
+
+/**
+ * Every tenant table, so the RLS migration can be checked against one list rather than memory.
+ *
+ * `migrations.test.ts` asks the catalogue the same question independently — every table in `mod_meet`
+ * with a `workspace_id` column and no forced policy — and compares the two answers, so a table added
+ * here without a policy fails by name, and a table added to the schema and forgotten here fails too.
+ */
+export const TENANT_TABLES = ['rooms', 'meetings', 'participants', 'invites'] as const

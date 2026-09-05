@@ -23,7 +23,7 @@ importers:
         version: 1.15.0(fastify@5.12.3)
       drizzle-orm:
         specifier: ^0.45.0
-        version: 0.45.2(pg@8.23.0)
+        version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
       zod:
         specifier: ^4.1.0
         version: 4.5.4
@@ -39,7 +39,7 @@ importers:
         version: 0.8.0
       '@kernhq/kernel':
         specifier: ^0.10.0
-        version: 0.10.1
+        version: 0.10.1(@types/pg@8.23.1)
       '@kernhq/testing':
         specifier: ^0.1.12
         version: 0.1.14
@@ -48,16 +48,22 @@ importers:
         version: 0.1.1
       '@kernhq/ui':
         specifier: ^0.14.0
-        version: 0.14.2(@floating-ui/dom@1.8.0)(@internationalized/date@3.12.4)(@tanstack/svelte-query@6.1.48(svelte@5.57.0))(@tiptap/extension-text-style@3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3)))(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.3)(svelte@5.57.0)
+        version: 0.14.2(@floating-ui/dom@1.8.0)(@internationalized/date@3.12.4)(@tanstack/svelte-query@6.1.48(svelte@5.57.0))(@tiptap/extension-text-style@3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3)))(@types/pg@8.23.1)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.3)(svelte@5.57.0)
       '@tanstack/svelte-query':
         specifier: ^6.1.0
         version: 6.1.48(svelte@5.57.0)
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@types/pg':
+        specifier: ^8.15.0
+        version: 8.23.1
       drizzle-kit:
         specifier: ^0.31.0
         version: 0.31.10
+      pg:
+        specifier: ^8.16.0
+        version: 8.23.0
       svelte:
         specifier: ^5.46.0
         version: 5.57.0
@@ -1383,6 +1389,9 @@ packages:
 
   '@types/node@24.13.3':
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
+
+  '@types/pg@8.23.1':
+    resolution: {integrity: sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==}
 
   '@types/ssh2-streams@0.1.13':
     resolution: {integrity: sha512-faHyY3brO9oLEA0QlcO8N2wT7R0+1sHWZvQ+y3rMLwdY1ZyS1z0W3t65j9PqT4HmQ6ALzNe7RZlNuCNE0wBSWA==}
@@ -3793,7 +3802,7 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
-  '@kernhq/kernel@0.10.1':
+  '@kernhq/kernel@0.10.1(@types/pg@8.23.1)':
     dependencies:
       '@aws-sdk/client-s3': 3.1115.0
       '@aws-sdk/s3-request-presigner': 3.1115.0
@@ -3805,7 +3814,7 @@ snapshots:
       '@orpc/openapi': 1.15.0(fastify@5.12.3)
       '@orpc/server': 1.15.0(fastify@5.12.3)
       '@orpc/zod': 1.15.0(@orpc/contract@1.15.0)(@orpc/server@1.15.0(fastify@5.12.3))(fastify@5.12.3)(zod@4.5.4)
-      drizzle-orm: 0.45.2(pg@8.23.0)
+      drizzle-orm: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
       fastify: 5.12.3
       ioredis: 6.0.0
       jose: 6.2.12
@@ -3873,11 +3882,11 @@ snapshots:
 
   '@kernhq/tsconfig@0.1.1': {}
 
-  '@kernhq/ui@0.14.2(@floating-ui/dom@1.8.0)(@internationalized/date@3.12.4)(@tanstack/svelte-query@6.1.48(svelte@5.57.0))(@tiptap/extension-text-style@3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3)))(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.3)(svelte@5.57.0)':
+  '@kernhq/ui@0.14.2(@floating-ui/dom@1.8.0)(@internationalized/date@3.12.4)(@tanstack/svelte-query@6.1.48(svelte@5.57.0))(@tiptap/extension-text-style@3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3)))(@types/pg@8.23.1)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.3)(svelte@5.57.0)':
     dependencies:
       '@hocuspocus/provider': 4.6.0(y-protocols@1.0.7(yjs@13.6.32))(yjs@13.6.32)
       '@kernhq/contracts': 0.8.0
-      '@kernhq/kernel': 0.10.1
+      '@kernhq/kernel': 0.10.1(@types/pg@8.23.1)
       '@kernhq/sdk': 0.1.10
       '@lucide/svelte': 1.41.0(svelte@5.57.0)
       '@tanstack/svelte-query': 6.1.48(svelte@5.57.0)
@@ -4541,6 +4550,12 @@ snapshots:
     dependencies:
       undici-types: 7.18.2
 
+  '@types/pg@8.23.1':
+    dependencies:
+      '@types/node': 24.13.3
+      pg-protocol: 1.16.0
+      pg-types: 2.2.0
+
   '@types/ssh2-streams@0.1.13':
     dependencies:
       '@types/node': 24.13.3
@@ -4892,8 +4907,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.13
 
-  drizzle-orm@0.45.2(pg@8.23.0):
+  drizzle-orm@0.45.2(@types/pg@8.23.1)(pg@8.23.0):
     optionalDependencies:
+      '@types/pg': 8.23.1
       pg: 8.23.0
 
   eastasianwidth@0.2.0: {}

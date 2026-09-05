@@ -2,10 +2,15 @@
 
 The meetings module for [Kern](https://github.com/KernAIO/app).
 
-**Nothing is built yet.** This repository is the package skeleton: it compiles, it publishes, and it
-carries no features. It declares no permissions, no capabilities, no procedures and no tables, and it
-is registered in no Kern service and in no Kern screen — so installing it into a host adds an empty
-`mod_meet` Postgres schema and changes nothing a person can see.
+**There is nothing here a person can use.** The package holds the module's data model — three
+permissions, two capabilities and four tables — and no procedures, no screens and no strings. It is
+registered in no Kern service and in no Kern screen, so installing it into a host adds the `mod_meet`
+Postgres schema and no API surface at all.
+
+Both capabilities (`calls`, and `rooms`, which depends on it) default to **off**, and neither is
+`required`. That is deliberate rather than incidental: a workspace that never asked for meetings gets
+nothing, including a workspace that has existed for years, and every surface added later has to name
+one of the two.
 
 Kern does not do audio or video meetings today. `ROADMAP.md` in the umbrella repository is the
 honest answer to when it will, and this file will say what the module does the day it does something.
@@ -14,10 +19,10 @@ honest answer to when it will, and this file will say what the module does the d
 
 ```
 module-meet/
-  src/contract/     what this module promises        ← empty
+  src/contract/     what this module promises        ← permissions, capabilities, models; no procedures
   src/server/       how it keeps that promise        ← the module definition and its schema
   src/client/       its screens and its strings      ← empty
-  migrations/       its own Postgres schema          ← no migrations yet
+  migrations/       its own Postgres schema          ← rooms, meetings, participants, invites
 ```
 
 `STRUCTURE.md` explains the shape, and it is the same shape as every other Kern module — first-party
