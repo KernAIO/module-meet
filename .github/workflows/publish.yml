@@ -111,6 +111,16 @@ jobs:
             exit 0
           fi
           # The newest `## <version>` heading is the section for the version just published.
-          BODY=$(awk -v ver="$VERSION" 'BEGIN { p=0 } /^## / { if (p) exit; p = ($0 == "## " ver) } p' CHANGELOG.md)
+          #
+          # A package's *first* release has no CHANGELOG.md at all — `changeset version` writes that
+          # file, and a first release happens without one, because there is nothing to bump from.
+          # Reading it unguarded under `set -e` therefore failed the run **after npm had already
+          # accepted the package and the tag had been pushed**: the release was done and the run was
+          # red, which is the worst possible pairing for whoever reads it. Reproduced on
+          # module-meet's first publish.
+          BODY=""
+          if [ -f CHANGELOG.md ]; then
+            BODY=$(awk -v ver="$VERSION" 'BEGIN { p=0 } /^## / { if (p) exit; p = ($0 == "## " ver) } p' CHANGELOG.md)
+          fi
           [ -n "$BODY" ] || BODY="Version $VERSION — see the commits for what changed."
           gh release create "$TAG" --title "$TAG" --notes "$BODY"
