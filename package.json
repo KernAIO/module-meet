@@ -1,7 +1,7 @@
 {
   "name": "@kernhq/module-meet",
   "version": "0.2.0",
-  "description": "Meetings module for Kern — the package skeleton; it carries no features yet",
+  "description": "Meetings module for Kern — its permissions, capabilities and Postgres schema; no procedures or screens yet",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
