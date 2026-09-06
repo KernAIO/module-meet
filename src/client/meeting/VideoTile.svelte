@@ -45,16 +45,19 @@ $effect(() => {
 
   <div class="caption">
     <span class="who">{tile.name}</span>
+    <!--
+      `role="img"` with a label, never a visually hidden `<span>`: a hidden span is 1px square with
+      a clip-path rather than `display:none`, so a contrast audit still measures its text — and
+      white-on-danger inside a badge failed exactly that in dark mode.
+    -->
     {#if !tile.micOn}
-      <span class="badge" title={t('tile_muted')}>
+      <span class="badge" role="img" aria-label={t('tile_muted')}>
         <Icon name="mic" size={12} strokeWidth={1.8} />
-        <span class="sr">{t('tile_muted')}</span>
       </span>
     {/if}
     {#if tile.sharing}
-      <span class="badge" title={t('tile_sharing')}>
+      <span class="badge" role="img" aria-label={t('tile_sharing')}>
         <Icon name="monitor" size={12} strokeWidth={1.8} />
-        <span class="sr">{t('tile_sharing')}</span>
       </span>
     {/if}
   </div>
@@ -69,8 +72,18 @@ $effect(() => {
   border: 1px solid var(--kern-border);
   min-inline-size: 0;
 }
+/*
+ * A height rather than a ratio, and that is the whole of it.
+ *
+ * A 16:9 tile across a wide content area is some 500px tall on a laptop, which pushes the strip
+ * and — much worse — the control bar with Leave on it below the fold; a meeting is the one screen
+ * somebody has to be able to get *out* of at a glance. Capping the height of a tile that *has* a
+ * ratio does not work either: the browser keeps the ratio by shrinking the width, so the stage ends
+ * up two thirds of the way across the page with dead space beside it. So the height is stated, the
+ * width fills the column, and `object-fit: cover` crops the picture to whatever shape that is.
+ */
 .tile.feature {
-  aspect-ratio: 16 / 9;
+  block-size: min(46vh, 440px);
 }
 .tile.rail {
   aspect-ratio: 4 / 3;
@@ -141,13 +154,5 @@ video {
   border-radius: var(--kern-r-full);
   background: var(--kern-danger);
   color: #fff;
-}
-.sr {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 </style>

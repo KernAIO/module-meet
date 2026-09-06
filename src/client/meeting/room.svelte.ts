@@ -166,15 +166,26 @@ class MeetingSession {
     }
   }
 
+  /**
+   * Leave, and say so **before** the socket has finished closing.
+   *
+   * The state is reset synchronously and the disconnect awaited afterwards, which is the opposite
+   * of the obvious order and is what makes this usable from a Svelte effect. Written the other way
+   * round the resets land in a microtask, so a caller that leaves one meeting and immediately opens
+   * another has the second one wiped out by the tail of the first — measured on 2026-09-06, where
+   * it showed up as `?join=1` silently rendering the pre-join and the end-to-end sweep passing
+   * while auditing the wrong screen. It is also the better behaviour for a person: pressing Leave
+   * changes the screen at once rather than when the network is done.
+   */
   async leave() {
     this.#leaving = true
-    await this.#dispose()
     this.status = 'idle'
     this.tiles = []
     this.messages = []
     this.meetingId = null
     this.isDemo = false
     this.failure = null
+    await this.#dispose()
   }
 
   async toggleMicrophone() {

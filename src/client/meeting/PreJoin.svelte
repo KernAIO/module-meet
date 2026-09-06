@@ -65,13 +65,21 @@ const speakerSelectable = typeof HTMLMediaElement !== 'undefined' && 'setSinkId'
 
 let stream: MediaStream | null = null
 let audio: { context: AudioContext; frame: number } | null = null
+/**
+ * Whether a microphone is actually open, which is what decides whether the meter is drawn at all.
+ *
+ * A bar that can never move is a broken-looking element rather than a quiet one: in the demo, and
+ * with the microphone switched off, there is nothing for it to say and it is absent instead.
+ */
+let metering = $state(false)
 
 function stopMeter() {
+  metering = false
+  level = 0
   if (!audio) return
   cancelAnimationFrame(audio.frame)
   void audio.context.close().catch(() => {})
   audio = null
-  level = 0
 }
 
 function stopStream() {
@@ -109,9 +117,30 @@ function startMeter(source: MediaStream) {
       if (audio) audio.frame = requestAnimationFrame(tick)
     }
     audio = { context, frame: requestAnimationFrame(tick) }
+    metering = true
   } catch {
     // No meter is a smaller loss than no pre-join screen.
   }
+}
+
+/**
+ * What is plugged in, and which of it to use.
+ *
+ * `enumerateDevices` **never prompts** — that is what makes it safe to call in the demo, where no
+ * camera may be opened at all. Without permission the labels come back empty and the picker numbers
+ * them, which is a good deal better than three rows reading "Nothing found" on a machine that
+ * plainly has a camera.
+ */
+async function readDevices(devices: MediaDevices, wantedCamera: string | null, wantedMic: string | null) {
+  const found = await devices.enumerateDevices().catch(() => [] as MediaDeviceInfo[])
+  const of = (kind: MediaDeviceKind) =>
+    found.filter((d) => d.kind === kind).map((d) => ({ deviceId: d.deviceId, label: d.label }))
+  cameras = of('videoinput')
+  microphones = of('audioinput')
+  speakers = of('audiooutput')
+  cameraId = pickDevice(cameras, wantedCamera)
+  microphoneId = pickDevice(microphones, wantedMic)
+  speakerId = pickDevice(speakers, speakerId)
 }
 
 async function openStream(
@@ -121,13 +150,18 @@ async function openStream(
   wantedMic: string | null,
 ) {
   stopStream()
-  if (isDemo) return
+  const devices = typeof navigator === 'undefined' ? undefined : navigator.mediaDevices
+  if (isDemo) {
+    // The demo lists what is plugged in and opens none of it. Enumerating prompts for nothing, so
+    // the pickers are the real ones and the camera light never comes on.
+    if (devices) await readDevices(devices, wantedCamera, wantedMic)
+    return
+  }
   if (!secureContext) {
     onmediafailure('insecure')
     return
   }
   if (!camera && !microphone) return
-  const devices = navigator.mediaDevices
   if (!devices) {
     // No `mediaDevices` at all is the same deployment as an insecure context, and saying "you
     // denied permission" to somebody who was never asked sends them to a settings page that
@@ -144,19 +178,11 @@ async function openStream(
     onmediafailure(classifyMediaError(error, secureContext))
     return
   }
-  // Labels are empty until permission has been granted once, so the list is read *after* the
-  // stream rather than before it.
-  const found = await devices.enumerateDevices().catch(() => [] as MediaDeviceInfo[])
-  const of = (kind: MediaDeviceKind) =>
-    found.filter((d) => d.kind === kind).map((d) => ({ deviceId: d.deviceId, label: d.label }))
-  cameras = of('videoinput')
-  microphones = of('audioinput')
-  speakers = of('audiooutput')
-  cameraId = pickDevice(cameras, wantedCamera)
-  microphoneId = pickDevice(microphones, wantedMic)
-  speakerId = pickDevice(speakers, speakerId)
+  // Read *after* the stream: a browser leaves every label empty until permission has been granted
+  // once, so asking first would number devices it is about to be able to name.
+  await readDevices(devices, wantedCamera, wantedMic)
   if (videoEl) videoEl.srcObject = stream
-  if (microphone) startMeter(stream)
+  if (microphone && stream.getAudioTracks().length > 0) startMeter(stream)
 }
 
 /**
@@ -253,9 +279,15 @@ function join() {
           wantCamera = !wantCamera
         }}
       />
-      <div class="meter" role="img" aria-label={t('mic_level')}>
-        <span class="fill" style:inline-size={`${Math.round(level * 100)}%`}></span>
-      </div>
+      <!--
+        Only while a microphone is genuinely open. A bar that can never move reads as an element
+        that failed to render, and in the demo — where nothing is captured — it would never move.
+      -->
+      {#if metering}
+        <div class="meter" role="img" aria-label={t('mic_level')}>
+          <span class="fill" style:inline-size={`${Math.round(level * 100)}%`}></span>
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -294,7 +326,9 @@ function join() {
 }
 .preview {
   position: relative;
-  aspect-ratio: 16 / 9;
+  /* A stated height rather than a ratio, for the reason `VideoTile` records: a capped ratio keeps
+     itself by shrinking the width, and Join has to stay on screen either way. */
+  block-size: min(46vh, 380px);
   border-radius: var(--kern-r-2xl);
   overflow: hidden;
   background: var(--kern-surface-raised);
@@ -325,7 +359,9 @@ function join() {
   gap: 8px;
 }
 .meter {
-  flex: 1;
+  /* A fixed width beside the two buttons rather than the rest of the row: a full-width rule reads
+     as a stray horizontal line, and a level meter only needs enough length to be read at a glance. */
+  inline-size: 140px;
   block-size: 6px;
   border-radius: var(--kern-r-full);
   background: var(--kern-surface-raised);

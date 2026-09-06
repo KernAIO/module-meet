@@ -32,16 +32,25 @@ let { tiles, onClose }: Props = $props()
       <li class="row">
         <Avatar name={tile.name} id={tile.id} size={24} />
         <span class="who">{tile.name}{tile.isLocal ? ` · ${t('you')}` : ''}</span>
+        <!--
+          `role="img"` with a label rather than a visually hidden `<span>`, and the mark only when
+          there is something to mark.
+          A hidden span is still text to a contrast audit — it is 1px square with a clip-path, not
+          `display:none` — so `.sr` inside a danger-toned mark was measured at 3.19:1 in dark mode
+          and failed the sweep. The label carries the same words to a screen reader with nothing to
+          measure. An unmuted microphone gets no badge at all: every video product marks the
+          exception rather than the rule, and a row of mic icons is noise.
+        -->
         {#if tile.sharing}
-          <span class="mark sharing" title={t('tile_sharing')}>
+          <span class="mark sharing" role="img" aria-label={t('tile_sharing')}>
             <Icon name="monitor" size={13} strokeWidth={1.7} />
-            <span class="sr">{t('tile_sharing')}</span>
           </span>
         {/if}
-        <span class="mark" class:muted={!tile.micOn} title={tile.micOn ? '' : t('tile_muted')}>
-          <Icon name="mic" size={13} strokeWidth={1.7} />
-          {#if !tile.micOn}<span class="sr">{t('tile_muted')}</span>{/if}
-        </span>
+        {#if !tile.micOn}
+          <span class="mark muted" role="img" aria-label={t('tile_muted')}>
+            <Icon name="mic" size={13} strokeWidth={1.7} />
+          </span>
+        {/if}
       </li>
     {/each}
   </ul>
@@ -110,13 +119,5 @@ let { tiles, onClose }: Props = $props()
 /* A colour, never opacity: a row faded to 0.5 is unreadable whatever token it names. */
 .mark.muted {
   color: var(--kern-danger);
-}
-.sr {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 </style>

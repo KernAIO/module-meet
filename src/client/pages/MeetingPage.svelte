@@ -70,12 +70,19 @@ const meetingId = $derived(params.meetingId ?? '')
 /**
  * `?join=1` means "I have already agreed to be in this" and skips the door.
  *
- * Read once, at mount, and never written into the link this screen hands out: an invitation goes to
- * the pre-join, because somebody following a link has not agreed to anything yet. It exists for the
- * other direction — the moment a person accepts a ring, which is the next slice, and the demo,
- * where it is what puts the meeting screen itself in front of the end-to-end sweep.
+ * Never written into the link this screen hands out: an invitation goes to the pre-join, because
+ * somebody following a link has not agreed to anything yet. It exists for the other direction — the
+ * moment a person accepts a ring, which is the next slice, and the demo, where it is what puts the
+ * meeting screen itself in front of the end-to-end sweep.
+ *
+ * **`$derived`, not a `const` read at mount, and that is not a style preference.** The shell fills
+ * the navigation singleton from an `$effect` in `(app)/[ws]/+layout.svelte`, and a parent's effect
+ * runs *after* its children have mounted — so at this component's init `navigation.search` is still
+ * empty and reading it there answers "no" to every link. Measured on 2026-09-06: written as a
+ * `const`, `/{ws}/meet/m/mock?join=1` rendered the pre-join, and the end-to-end sweep passed while
+ * auditing the wrong screen under the right name.
  */
-const autoJoin = navigation.search.join === '1'
+const autoJoin = $derived(navigation.search.join === '1')
 
 const configQuery = createQuery(() => ({
   queryKey: meetKeys.config(workspaceId),
@@ -144,38 +151,38 @@ const workspace = $derived(session.workspaces.find((w) => w.id === workspaceId))
 const myName = $derived(session.user?.name ?? t('you'))
 
 /**
- * A session left over from another meeting must not be drawn under this one's name, and leaving the
- * page leaves the meeting.
+ * One effect, because the two halves are ordered against each other.
  *
- * `untrack` around the read, or the effect depends on the state it writes and re-runs itself — the
- * shape that turned chat's page effect into a loop that resurrected the channel somebody had just
- * left. The nothing-survives-navigation half is deliberate for this slice: the persistent bar that
- * keeps a call alive while somebody opens an issue is the next one, and it is the reason the
- * session is a module singleton rather than state in this component.
+ * A session left over from another meeting must not be drawn under this one's name, so it is
+ * cleared first; a link that says "already agreed" then walks straight in. Written as two effects
+ * they raced — the reset landed after the join and wiped it — and the symptom was `?join=1`
+ * rendering the pre-join with nothing failing anywhere.
+ *
+ * Everything inside `untrack`: `join()` reads and writes `joining`, and `leave()` writes the status
+ * this would otherwise depend on, so a tracked read here is an effect that fires itself the moment
+ * it starts working — the shape that turned chat's page effect into a loop resurrecting the channel
+ * somebody had just left.
+ *
+ * The call not surviving navigation is deliberate for this slice. The persistent bar that keeps one
+ * alive while somebody opens an issue is the next one, and it is why the session is a module
+ * singleton rather than state in this component.
  */
 $effect(() => {
   const id = meetingId
+  const auto = autoJoin
   if (!id) return
-  if (untrack(() => meetingSession.meetingId) !== id) void meetingSession.leave()
+  untrack(() => {
+    if (meetingSession.meetingId !== id) void meetingSession.leave()
+    if (!auto || meetingSession.status !== 'idle') return
+    // The signed-in person's own name, not "You": a real tile carries whatever the token said, and
+    // a demo whose local tile is labelled differently from every other one demonstrates the wrong
+    // thing. The rail is where "· You" is added, exactly as it is in a real meeting.
+    if (isDemo) meetingSession.startDemo(id, mockTiles(myName), mockMessages())
+    else void join({ microphone: true, camera: true, cameraId: null, microphoneId: null, speakerId: null })
+  })
   return () => {
     void meetingSession.leave()
   }
-})
-
-/**
- * The demo, and a link that says "already agreed", both skip the door.
- *
- * Everything inside `untrack`, because `join()` reads and writes `joining` — an effect that
- * depended on it would fire itself the moment it started working.
- */
-$effect(() => {
-  const id = meetingId
-  if (!id || !autoJoin) return
-  untrack(() => {
-    if (meetingSession.status !== 'idle') return
-    if (isDemo) meetingSession.startDemo(id, mockTiles(t('you')), mockMessages())
-    else void join({ microphone: true, camera: true, cameraId: null, microphoneId: null, speakerId: null })
-  })
 })
 
 interface JoinChoice {
