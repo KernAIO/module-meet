@@ -128,6 +128,17 @@ type Screen =
 
 const screen = $derived.by((): Screen => {
   if (configQuery.isPending) return 'loading'
+  /**
+   * A failed question is not a negative answer.
+   *
+   * `configured` is `data?.configured ?? false`, so a 500, a dropped core or any network failure
+   * makes it false — and without this branch the reader is sent to `not_configured`, which names
+   * `LIVEKIT_API_SECRET` and the `--profile calls` line and tells them to go and edit a compose
+   * file. That is a confident, wrong diagnosis of an instance whose media server may be perfectly
+   * fine, and it is worse than saying nothing: it sends somebody to change configuration that was
+   * never the problem. `error` says the app could not ask, and offers a retry.
+   */
+  if (configQuery.isError) return 'error'
   if (!configured) return 'not_configured'
   if (!secureContext) return 'insecure'
   if (joinError) {

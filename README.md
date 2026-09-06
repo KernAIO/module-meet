@@ -2,11 +2,19 @@
 
 The meetings module for [Kern](https://github.com/KernAIO/app).
 
-**One screen works: a meeting, at `/{workspace}/meet/m/{id}`.** A person opens it, checks their
-camera and microphone on a pre-join screen, joins, and is in a call with everybody else who opened
-the same address — video, audio, screen sharing, a participant list and an in-meeting chat panel that
-says out loud that its messages end with the meeting. There is no navigation row yet, because there
-is nowhere for one to land: rooms and a meetings home are a later slice.
+**One screen is built: a meeting, at `/{workspace}/meet/m/{id}`.** It renders a pre-join with a
+camera preview and device pickers, then a stage, a participant strip, a control bar for microphone,
+camera, screen share and leaving, and an in-meeting chat panel that says out loud that its messages
+end with the meeting. There is no navigation row yet, because there is nowhere for one to land:
+rooms and a meetings home are a later slice.
+
+**Nobody has held a call with it.** No two people have connected through a LiveKit server, no audio
+or video has crossed a network, and no screen has been shared. What has been exercised is the screen
+itself against fixture data and the server against a scratch database — every state renders, the
+token carries the right grant, and the module is inert in a workspace that has not switched `calls`
+on. None of that is the same claim as "it works", and this file will not make that claim until two
+people on two machines on two different networks have seen and heard each other. That run is the
+acceptance test for the meetings release; until it passes, treat this module as built and unproven.
 
 Both capabilities (`calls`, and `rooms`, which depends on it) default to **off**, and neither is
 `required`. That is deliberate rather than incidental: a workspace that never asked for meetings gets
