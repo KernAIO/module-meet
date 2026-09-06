@@ -26,9 +26,11 @@ import { defineCapabilities } from '@kernhq/contracts'
  * - **Reversible without a migration.** Switching either off writes a boolean into module settings.
  *   The rows stay exactly where they are, and switching it back on finds the history intact.
  *
- * Nothing checks either of them as of this commit — the router is empty and the module is registered
- * in no host service. They are declared first on purpose: a capability added *after* the surfaces it
- * is meant to gate is a capability that at least one surface will be missing.
+ * `calls` is checked now: `meetings.start` and `meetings.join` carry
+ * `requiresCapability('meet', 'calls')`, and `isolation.test.ts` calls both in a workspace that has
+ * touched nothing and asserts the answer is 404. `rooms` is not checked by anything yet — it gates
+ * screens that arrive in a later slice. It is declared early on purpose: a capability added *after*
+ * the surfaces it is meant to gate is a capability that at least one surface will be missing.
  */
 export const meetCapabilities = defineCapabilities([
   {
@@ -74,11 +76,18 @@ export type MeetCapabilityId = (typeof meetCapabilities)[number]['id']
  * decides what to answer — a procedure gated in one and not the other is a tab that is there and
  * 404s, or one that is hidden and works.
  *
- * Empty because the contract is empty. `module.test.ts` reads it, and its loops are written to start
- * working the moment the first procedure arrives rather than being added afterwards, when the
- * router is "finished".
+ * `module.test.ts` holds this against the contract from both sides: every declared procedure has to
+ * appear here or on that file's short list of ones deliberately ungated, and every procedure named
+ * here has to carry `requiresCapability` between the workspace gate and the permission check. So a
+ * procedure added to the contract and forgotten in either place is named by a failing test rather
+ * than shipping open.
  */
 export const meetCapabilityProcedures: Record<MeetCapabilityId, readonly string[]> = {
-  calls: [],
+  /**
+   * `config.get` is deliberately absent, and it is the only procedure that will ever be. It answers
+   * whether meetings can work at all, which is exactly the question an administrator asks when the
+   * capability is off — a diagnostic gated on the feature it diagnoses tells nobody anything.
+   */
+  calls: ['meetings.start', 'meetings.join'],
   rooms: [],
 }

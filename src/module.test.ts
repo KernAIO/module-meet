@@ -12,12 +12,12 @@
  *      so a workspace with the capability off gets the honest 404 rather than the 403 a permission
  *      check would produce first.
  *
- * **The contract is empty as of this commit, so loops 1–3 run over an empty set.** That is the state
- * this slice is meant to be in, and it is also exactly how a guard becomes decorative: a check that
- * has never been seen to fail is a comment with a green tick beside it. So the two functions those
- * loops call are also aimed at chains built here by hand — one correct and several not — and at a
- * procedure assembled from the **real** kernel middlewares, so the machinery that tells one
- * middleware from another is exercised now rather than on the day the first procedure lands.
+ * The two functions those loops call are also aimed at chains built here by hand — one correct and
+ * several not — and at a procedure assembled from the **real** kernel middlewares, so the machinery
+ * that tells one middleware from another is exercised by this file itself rather than only by
+ * whatever the router happens to contain today. It was written that way while the contract was
+ * still empty and every loop passed over nothing; it is kept because a checker nobody has watched
+ * fail is a checker nobody knows the shape of.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -88,12 +88,27 @@ describe('the contract and the router agree', () => {
     if (meetModule.router) expect(meetModule.contract).toBeDefined()
   })
 
-  it('mounts nothing under /api/meet while the contract is empty', () => {
-    // The state this slice ships in, asserted rather than assumed: a host that imports this module
-    // gains four tables in `mod_meet` and no API surface at all. Delete this test in the commit that
-    // adds the first procedure — it is the one assertion here that is meant to stop being true.
-    expect(Object.keys(declared)).toEqual([])
-    expect(meetModule.router).toBeUndefined()
+  it('publishes exactly the three procedures this slice is meant to have', () => {
+    // Pinned, so a fourth is a decision somebody records here rather than a line nobody notices —
+    // and so the loops above can never pass over an empty set again without this failing first.
+    expect(Object.keys(declared).sort()).toEqual(['config.get', 'meetings.join', 'meetings.start'])
+  })
+
+  it('answers config on GET and both meeting procedures on POST', () => {
+    // The REST shape an administrator's `curl` and the generated OpenAPI both depend on. Without a
+    // `.route()` oRPC invents one from the procedure's path, which is a working API and not the one
+    // the docs describe.
+    const routes = Object.fromEntries(
+      Object.entries(declared).map(([name, leaf]) => [
+        name,
+        `${leaf['~orpc'].route?.method} ${leaf['~orpc'].route?.path}`,
+      ]),
+    )
+    expect(routes).toEqual({
+      'config.get': 'GET /config',
+      'meetings.start': 'POST /meetings',
+      'meetings.join': 'POST /meetings/{meetingId}/join',
+    })
   })
 })
 
@@ -236,32 +251,52 @@ describe('every procedure is authorised', () => {
     ).toEqual([])
   })
 
-  it('gates every procedure in a switchable capability’s own group', async () => {
-    /*
-     * The expectation is derived from the contract rather than opted into. Checking only the
-     * procedures named in `meetCapabilityProcedures` would make the map both the claim and the
-     * evidence for it: add a procedure to the contract, forget the middleware, forget the map, and
-     * every test here stays green while a workspace that switched the feature off can call it.
-     *
-     * So the rule is read off the module's own declarations: **a capability owns the router group
-     * named after it.** Neither group has any procedures yet, which is why the length assertion is
-     * the one part of this that is deliberately allowed to hold at zero — and it is the assertion
-     * that starts biting the moment somebody adds `rooms.list` without `requiresCapability`.
-     */
+  /**
+   * The procedures that are deliberately behind **no** capability, and the reason for each.
+   *
+   * This is the half of the rule that cannot be derived, so it is written out and kept short. It is
+   * an *opt-out* list rather than an opt-in one, which is the direction that fails safe: a
+   * procedure added to the contract and forgotten everywhere else appears in neither this list nor
+   * `meetCapabilityProcedures`, and the accounting test below names it. Checking only the
+   * procedures the map already claims would make the map both the claim and the evidence for it.
+   */
+  const UNGATED_ON_PURPOSE = ['config.get']
+
+  it('accounts for every declared procedure — gated, or ungated on purpose', () => {
+    const mapped = Object.values(meetCapabilityProcedures).flat()
+    expect(
+      [...new Set(mapped)].length,
+      'a procedure named under two capabilities is gated by whichever middleware the router happens to carry',
+    ).toBe(mapped.length)
+    expect(
+      [...mapped, ...UNGATED_ON_PURPOSE].sort(),
+      'every procedure is behind a capability or is on the list of ones deliberately not',
+    ).toEqual(Object.keys(declared).sort())
+  })
+
+  it('gates every procedure its capability claims, between the workspace gate and the permission', async () => {
     const chains = await resolveChains()
     for (const capability of meetCapabilities.filter((c) => !c.required).map((c) => c.id)) {
-      const group = Object.keys(declared)
-        .filter((name) => name.startsWith(`${capability}.`))
-        .sort()
+      const group = [...(meetCapabilityProcedures[capability] ?? [])].sort()
       expect(
         ungated(capability, group, chains),
         `these need requiresCapability('${MODULE_ID}', '${capability}') between the workspace gate and the permission check`,
       ).toEqual([])
-      expect(
-        [...(meetCapabilityProcedures[capability] ?? [])].sort(),
-        `the map the client reads and the group the router answers must not drift`,
-      ).toEqual(group)
     }
+  })
+
+  it('puts no capability gate on the one procedure that must answer with the feature off', async () => {
+    /*
+     * `config.get` is the diagnostic. An administrator whose meetings do not work asks it precisely
+     * when `calls` is off, so a gate on it would answer 404 to the only question worth asking. It is
+     * still behind `workspaceScoped` and a permission — it is the *capability* it must not carry.
+     */
+    const chains = await resolveChains()
+    for (const name of UNGATED_ON_PURPOSE)
+      expect(
+        (chains[name] ?? []).filter((r) => r.capability !== undefined),
+        `${name} must reach no capability`,
+      ).toEqual([])
   })
 })
 
@@ -423,22 +458,19 @@ describe('the module is inert until an administrator asks for it', () => {
     expect(meetCapabilities.filter((c) => c.defaultEnabled).map((c) => c.id)).toEqual([])
   })
 
-  it('puts no field on the module settings screen while nothing reads one', () => {
+  it('puts a field on the module settings screen only because something reads it', () => {
     /*
-     * `MeetSettings` is declared and deliberately not handed to `defineModule`. Passing it is what
-     * renders `maxParticipants` on a workspace's settings screen, and nothing reads that number
-     * yet — a control that changes nothing is the same lie as a capability nothing checks.
-     *
-     * Delete this test in the commit that adds `meet.config.get`, which is the thing that reads it.
+     * `MeetSettings` is registered now, and `meet.config.get` is what earns it: the number an
+     * administrator sets is the number the server answers. A control nothing reads is the same lie
+     * as a capability nothing checks, so the two arrive together or not at all.
      *
      * Asserted through `toManifest`, because that is where the field a screen renders is actually
      * produced: `ModuleDefinition` carries `settings` and only the **manifest** carries
      * `settingsSchema`. Reading `definition.settingsSchema` — which does not exist — passed happily
-     * with `settings: MeetSettings` registered, which is the vacuous shape this whole file is
-     * written to avoid. Both are asserted now, so neither can drift alone.
+     * either way, which is the vacuous shape this whole file is written to avoid.
      */
-    expect(meetModule.definition.settings, 'nothing reads a setting yet').toBeUndefined()
-    expect(toManifest(meetModule.definition).settingsSchema, 'so core renders no form').toBeUndefined()
+    expect(meetModule.definition.settings, 'config.get reads maxParticipants out of it').toBeDefined()
+    expect(toManifest(meetModule.definition).settingsSchema, 'so core renders the form').toBeDefined()
   })
 
   it('declares the two capabilities every later surface has to name', () => {

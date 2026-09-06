@@ -8,8 +8,13 @@ import { defineClientModule } from '@kernhq/ui'
  * route files in the app to keep in step: deleting this package removes the feature completely,
  * which is the test of whether something is a module at all.
  *
- * **It offers nothing yet, and it is registered nowhere.** Every contribution added later carries
- * `capability`, so a workspace that has not switched meetings on never meets one:
+ * **It offers nothing yet — no navigation, no route, no widget — and that is deliberate.** The shell
+ * registers it, so `registerModule` has something to hold and the manifest lines up with the server
+ * module; the screens arrive in the next slice. A nav item added now would be a row that fails on
+ * click, which is worse than no row.
+ *
+ * Every contribution added later carries `capability`, so a workspace that has not switched meetings
+ * on never meets one:
  *
  * - `permission` — may *this person* reach it. Somebody else in the workspace may well see it.
  * - `capability` — does *this workspace* have the feature. Nobody sees it when off, and the API

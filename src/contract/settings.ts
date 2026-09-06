@@ -11,12 +11,15 @@ import { z } from 'zod'
  * the platform owns, so switching one off cannot collide with a settings field and cannot be dropped
  * by a settings round-trip.
  *
- * **Declared here and deliberately not passed to `defineModule` yet.** `defineModule({ settings })`
- * is what puts a field on a workspace's module settings screen, and nothing reads this number: a
- * form control that changes nothing teaches an administrator that the settings screen does not mean
- * anything, which is the same failure as a capability nothing checks. The shape exists so that the
- * procedure which answers it and the grant which is held to it read one definition rather than two;
- * it is registered on the module in the commit that reads it. `module.test.ts` pins that.
+ * **Passed to `defineModule`, and only because something reads it.** `defineModule({ settings })` is
+ * what puts a field on a workspace's module settings screen, and `meet.config.get` answers
+ * `maxParticipants` out of this schema — so the number an administrator sets is the number the
+ * server reports. A form control that changes nothing teaches an administrator that the settings
+ * screen does not mean anything, which is the same failure as a capability nothing checks;
+ * `module.test.ts` pins both halves through `toManifest`.
+ *
+ * Nothing **enforces** the ceiling yet. `config.get` reports it so a client can, and the server-side
+ * refusal belongs in the commit that has a room to count people in.
  */
 export const MeetSettings = z.object({
   /**

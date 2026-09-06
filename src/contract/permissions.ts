@@ -5,12 +5,10 @@ import { definePermissions } from '@kernhq/contracts'
  * it by default. A workspace can add or remove any of them afterwards with a custom role.
  *
  * A key with nothing checking it is a role editor full of switches that do nothing, so the list is
- * short and each entry names the procedure that will ask for it. **As of this commit nothing asks
- * for any of them**: the router is empty, the module is registered in no host service, and core
- * therefore has no manifest to render these from — so they are not yet visible to an administrator
- * anywhere. `meet.call.join` and `meet.call.start` are asked for by the procedures in the next
- * slice; `meet.call.host` by moderation. If moderation is cut, `meet.call.host` is deleted in the
- * same commit rather than left behind as a switch that changes nothing.
+ * short and each entry names the procedure that asks for it. `meet.call.join` is asked for by
+ * `meetings.join` and by `config.get`; `meet.call.start` by `meetings.start`. **`meet.call.host` is
+ * asked for by nothing yet** — moderation is a later slice, and if it is cut then `meet.call.host`
+ * is deleted in the same commit rather than left behind as a switch that changes nothing.
  *
  * `meet.room.manage` is deliberately **not** here. Rooms are a later slice with a capability of
  * their own, and a permission for a screen nobody can reach is the same lie one item earlier.

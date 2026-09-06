@@ -1,8 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Principal } from '@kernhq/contracts'
+import { CAPABILITIES_KEY, createKernel, type Kernel, type RequestContext } from '@kernhq/kernel'
+import { call } from '@orpc/server'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { meetModule } from './index.js'
+import { meetRouter } from './router.js'
 import { TENANT_TABLES } from './schema.js'
 
 /**
@@ -20,9 +25,12 @@ import { TENANT_TABLES } from './schema.js'
  * superuser nor owner, so it is subject to the policies either way; `migrations.test.ts` is what
  * asserts `force` is actually set on every table.
  *
- * There is no service layer to test yet: this module mounts no router. What is asserted here is the
- * last line rather than the first — that a session bound to one workspace cannot read or write
- * another's rows whatever a query's `where` clause says.
+ * The first half of this file asserts the **last** line — that a session bound to one workspace
+ * cannot read or write another's rows whatever a query's `where` clause says. The last block
+ * asserts the **first** line, against the real router: that a member of one workspace cannot obtain
+ * a LiveKit token for a meeting in another. Both are needed and neither substitutes for the other —
+ * the policies hold when a query forgets its predicate, and the router is what a person actually
+ * reaches.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -43,6 +51,8 @@ let admin: pg.Client
 let owner: pg.Client
 /** The connection everything is asserted through: no superuser, no bypass, not the owner. */
 let plain: pg.Client
+/** The scratch database, as the owner. What the kernel in the last block connects to. */
+let ownerUrl = ''
 
 beforeAll(async () => {
   admin = new pg.Client({ connectionString: BASE_URL })
@@ -51,6 +61,7 @@ beforeAll(async () => {
 
   const url = new URL(BASE_URL)
   url.pathname = `/${DB_NAME}`
+  ownerUrl = url.toString()
   owner = new pg.Client({ connectionString: url.toString() })
   await owner.connect()
 
@@ -344,5 +355,231 @@ describe('the two arms of every policy', () => {
       [OTHER_USER],
     )
     expect(other.rows[0]?.n, 'and to nobody else').toBe(0)
+  })
+})
+
+/**
+ * The same question asked of the router, which is the thing a person actually reaches.
+ *
+ * A LiveKit token is a bearer credential scoped to one room name, so "can A get a token for B's
+ * meeting" is not a database question at all — the row could stay perfectly invisible to A while a
+ * handler happily minted a token for a room name it took from the request. Every assertion here
+ * therefore reads the **token that came back**, or the error that came back instead of one.
+ *
+ * It runs a real kernel over the same scratch database, with core stubbed at the broker: that is
+ * what makes `workspaceScoped`, `requiresCapability` and `requires` the real middlewares rather than
+ * three functions a test agreed to believe in.
+ */
+describe('the router, and who may get a token out of it', () => {
+  let kernel: Kernel
+  let meet: ReturnType<typeof meetRouter>
+  let meetingA = ''
+  let meetingB = ''
+
+  /** What core is pretending each workspace has switched on. `null` = never touched the switchboard. */
+  const capabilities = new Map<string, Record<string, boolean>>()
+
+  const principal = (userId: string, workspaceId: string): Principal =>
+    ({
+      kind: 'user',
+      userId,
+      email: `${userId}@example.test`,
+      name: 'Ada Lovelace',
+      locale: 'en',
+      instanceAdmin: false,
+      service: null,
+      memberships: [{ workspaceId, role: 'admin', roleIds: [], groupIds: [], status: 'active' }],
+      permissionVersion: 0,
+    }) as unknown as Principal
+
+  const asUser = (workspaceId: string): RequestContext => ({
+    kernel,
+    principal: principal(USER, workspaceId),
+    requestId: 'test',
+    ip: '127.0.0.1',
+    headers: {},
+  })
+
+  /**
+   * The code an oRPC refusal actually carried.
+   *
+   * Asserting on a message would pass for any failure, a typo in the input included — and the whole
+   * distinction being made here is between two refusals that both stop the call.
+   */
+  const refusedWith = async (fn: () => Promise<unknown>): Promise<string> => {
+    try {
+      await fn()
+      return 'no error'
+    } catch (error) {
+      const e = error as { code?: string; cause?: { code?: string } }
+      return e.code ?? e.cause?.code ?? String(error)
+    }
+  }
+
+  /** Switch a workspace's capabilities for one block. The settings cache is 15s, so invalidate. */
+  async function withCapabilities(workspaceId: string, on: Record<string, boolean>, fn: () => Promise<void>) {
+    capabilities.set(workspaceId, on)
+    kernel.settings.invalidate(workspaceId)
+    try {
+      await fn()
+    } finally {
+      capabilities.delete(workspaceId)
+      kernel.settings.invalidate(workspaceId)
+    }
+  }
+
+  beforeAll(async () => {
+    // The router reads the environment once, when it is built — so this is set before, not after.
+    process.env.LIVEKIT_URL = 'ws://livekit:7880'
+    process.env.LIVEKIT_API_KEY = 'kern'
+    process.env.LIVEKIT_API_SECRET = 'an-isolation-test-secret-long-enough'
+
+    kernel = await createKernel({
+      service: 'meet-isolation-test',
+      modules: [meetModule],
+      role: 'api',
+      env: {
+        DATABASE_URL: ownerUrl,
+        KERN_SECRET: 'test-secret-that-is-long-enough-for-kern',
+        NODE_ENV: 'test',
+        NATS_URL: undefined,
+        VALKEY_URL: undefined,
+      },
+    })
+    kernel.broker.register('core', {
+      'modules.isEnabled': { handler: async () => true },
+      'authz.customRolePermissions': { handler: async () => [] },
+      'authz.bindings': { handler: async () => [] },
+      'settings.getModule': {
+        handler: async (input: { workspaceId: string }) => {
+          const on = capabilities.get(input.workspaceId)
+          return on ? { [CAPABILITIES_KEY]: on } : {}
+        },
+      },
+      'settings.setModule': { handler: async () => ({ ok: true }) },
+    })
+    await kernel.start()
+    meet = meetRouter(kernel)
+
+    const { rows } = await owner.query<{ id: string; livekit_room: string }>(
+      `select id, livekit_room from mod_meet.meetings order by livekit_room`,
+    )
+    meetingA = rows.find((r) => r.livekit_room === 'iso-a')!.id
+    meetingB = rows.find((r) => r.livekit_room === 'iso-b')!.id
+  }, 180_000)
+
+  afterAll(async () => {
+    await kernel?.stop().catch(() => undefined)
+    for (const key of ['LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET']) delete process.env[key]
+  })
+
+  /**
+   * `calls` on for both workspaces, which is the only state in which a token is obtainable at all.
+   * Without this every assertion below would be a 404 for the wrong reason.
+   */
+  const withCalls = (fn: () => Promise<void>) =>
+    withCapabilities(WS_A, { calls: true }, () => withCapabilities(WS_B, { calls: true }, fn))
+
+  it('gives a member of A a token for A’s own meeting — the control', async () => {
+    await withCalls(async () => {
+      const joined = await call(
+        meet.meetings.join,
+        { workspaceId: WS_A, meetingId: meetingA },
+        { context: asUser(WS_A) },
+      )
+      // The room in the grant, not merely "a token came back": a token is only as scoped as its
+      // room claim, and this is the claim every other assertion in this block is the absence of.
+      const grant = JSON.parse(Buffer.from(joined.token.split('.')[1]!, 'base64url').toString('utf8')) as {
+        video?: { room?: string }
+        sub?: string
+      }
+      expect(grant.video?.room).toBe(joined.meeting.livekitRoom)
+      expect(grant.sub).toBe(USER)
+    })
+  })
+
+  it('refuses a member of A a token for B’s meeting, with 404 rather than 403', async () => {
+    /*
+     * The assertion this whole file exists for, in its router form.
+     *
+     * **404, not 403.** A `FORBIDDEN` would confirm that the id the caller named is a real meeting
+     * somewhere on the instance, which is precisely the fact a cross-tenant refusal must not carry.
+     * The transaction is workspace-bound and `openMeetingById` names `workspace_id` in its
+     * predicate, so from A the row is not merely off-limits — it does not exist.
+     */
+    await withCalls(async () => {
+      expect(
+        await refusedWith(() =>
+          call(meet.meetings.join, { workspaceId: WS_A, meetingId: meetingB }, { context: asUser(WS_A) }),
+        ),
+      ).toBe('NOT_FOUND')
+    })
+  })
+
+  it('refuses even when the caller claims B’s workspace as well as B’s meeting', async () => {
+    // The other half of the same attempt: name the workspace the row really is in. `workspaceScoped`
+    // asks for a membership in it, and this principal has none.
+    await withCalls(async () => {
+      expect(
+        await refusedWith(() =>
+          call(meet.meetings.join, { workspaceId: WS_B, meetingId: meetingB }, { context: asUser(WS_A) }),
+        ),
+        'a member of A is not a member of B',
+      ).not.toBe('no error')
+    })
+  })
+
+  /**
+   * The safety property the release turns on: a workspace that has touched nothing.
+   *
+   * `isEnabled` in core answers `row?.enabled ?? true`, so `meet` is switched **on** in every
+   * workspace on every instance the night this rolls out. Both capabilities default to off and
+   * neither is `required`, which is the only thing standing between that and a Meetings item that
+   * appears unannounced and fails on click.
+   */
+  describe('a workspace that has touched nothing on the switchboard', () => {
+    it('answers 404 from a meetings procedure, not 403', async () => {
+      // No `withCapabilities` at all — core answers `{}`, exactly as it does for a workspace whose
+      // administrator has never opened Settings → Modules.
+      expect(capabilities.has(WS_A), 'this test is about the untouched state').toBe(false)
+      kernel.settings.invalidate(WS_A)
+      expect(
+        await refusedWith(() =>
+          call(meet.meetings.join, { workspaceId: WS_A, meetingId: meetingA }, { context: asUser(WS_A) }),
+        ),
+      ).toBe('NOT_FOUND')
+      expect(
+        await refusedWith(() => call(meet.meetings.start, { workspaceId: WS_A }, { context: asUser(WS_A) })),
+      ).toBe('NOT_FOUND')
+    })
+
+    it('still answers config.get, which is how an administrator finds out why', async () => {
+      /*
+       * The deliberate exception, and the reason there is one. This is the question somebody asks
+       * *because* meetings do not work; gated on `calls` it would answer 404 to the only person who
+       * needed it. `configured` and `reachable` stay separate — `reachable` is false here because
+       * nothing is listening on `livekit:7880` from a test runner, which is itself the honest answer.
+       */
+      kernel.settings.invalidate(WS_A)
+      const config = await call(meet.config.get, { workspaceId: WS_A }, { context: asUser(WS_A) })
+      expect(config.configured, 'a secret is set in this test’s environment').toBe(true)
+      expect(config.mediaUrl).toBe('ws://livekit:7880')
+      expect(typeof config.reachable).toBe('boolean')
+      expect(config.maxParticipants, 'the default, from a workspace that saved no settings').toBe(20)
+    })
+
+    it('starts answering the moment an administrator switches calls on', async () => {
+      // The other direction, so the 404s above are shown to be the capability and not something
+      // else refusing for its own reasons.
+      await withCalls(async () => {
+        const joined = await call(
+          meet.meetings.join,
+          { workspaceId: WS_A, meetingId: meetingA },
+          { context: asUser(WS_A) },
+        )
+        expect(joined.token.length).toBeGreaterThan(0)
+        expect(joined.expiresIn).toBe(600)
+      })
+    })
   })
 })
