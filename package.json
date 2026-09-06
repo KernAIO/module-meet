@@ -1,6 +1,6 @@
 {
   "name": "@kernhq/module-meet",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Meetings module for Kern — LiveKit configuration and the join token; no screens yet",
   "license": "AGPL-3.0-only",
   "repository": {
