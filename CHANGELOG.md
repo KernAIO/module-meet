@@ -1,5 +1,11 @@
 # @kernhq/module-meet
 
+## 0.2.3
+
+### Patch Changes
+
+- build(deps): raise @kernhq/testing to ^0.1.14
+
 ## 0.2.2
 
 ### Patch Changes
