@@ -22,7 +22,11 @@ export interface Tile {
   isLocal: boolean
   speaking: boolean
   micOn: boolean
-  cameraOn: boolean
+  /*
+   * No `cameraOn`, and that is a decision. Whether there is a picture is `attach`, which is null
+   * both for a closed camera and for a track that has not arrived yet — and the tile draws the same
+   * thing either way. A field nothing reads is a field the next person builds a rule on.
+   */
   sharing: boolean
   placeholder: 'camera_off' | 'demo'
   attach: ((el: HTMLVideoElement) => void) | null

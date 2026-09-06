@@ -227,7 +227,6 @@ async function join(choice: JoinChoice) {
     await meetingSession.connect(meetingId, {
       url: admitted.mediaUrl,
       token: admitted.token,
-      name: myName,
       microphone: choice.microphone,
       camera: choice.camera,
       cameraId: choice.cameraId,

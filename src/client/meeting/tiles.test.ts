@@ -7,7 +7,6 @@ const tile = (id: string, over: Partial<Tile> = {}): Tile => ({
   isLocal: false,
   speaking: false,
   micOn: true,
-  cameraOn: true,
   sharing: false,
   placeholder: 'camera_off',
   attach: null,

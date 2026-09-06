@@ -24,11 +24,13 @@ import { displayName, type Tile } from './tiles.js'
 
 export type MeetingStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'ended' | 'failed'
 
+/**
+ * What a connection needs. Deliberately **no display name**: the server puts one in the token, and
+ * a client that named itself would be a client that could name itself anything.
+ */
 export interface ConnectOptions {
   url: string
   token: string
-  /** Who you are on the tiles. The server fixes `identity`; this is the readable half. */
-  name: string
   microphone: boolean
   camera: boolean
   cameraId: string | null
@@ -57,11 +59,6 @@ class MeetingSession {
   #room: Room | null = null
   #identity = ''
   #leaving = false
-
-  /** Everybody but you — what the "you are the only one here" branch counts. */
-  get others(): Tile[] {
-    return this.tiles.filter((tile) => !tile.isLocal)
-  }
 
   /**
    * Fill the screen from fixtures and connect to nothing.
@@ -328,7 +325,6 @@ class MeetingSession {
       isLocal,
       speaking,
       micOn: person.isMicrophoneEnabled,
-      cameraOn: person.isCameraEnabled,
       sharing: Boolean(share?.track),
       placeholder: 'camera_off',
       attach: track ? (el: HTMLVideoElement) => void track.attach(el) : null,
