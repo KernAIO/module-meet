@@ -1,5 +1,11 @@
 # @kernhq/module-meet
 
+## 0.5.4
+
+### Patch Changes
+
+- fix(meet): stop claiming a call nobody has held, and a cause nobody proved
+
 ## 0.5.3
 
 ### Patch Changes
