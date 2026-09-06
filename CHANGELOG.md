@@ -1,5 +1,11 @@
 # @kernhq/module-meet
 
+## 0.2.4
+
+### Patch Changes
+
+- chore(renovate): drop dead @kernhq automerge rule
+
 ## 0.2.3
 
 ### Patch Changes
