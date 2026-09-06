@@ -1,7 +1,7 @@
 {
   "name": "@kernhq/module-meet",
   "version": "0.4.0",
-  "description": "Meetings module for Kern — LiveKit configuration and the join token; no screens yet",
+  "description": "Meetings module for Kern — audio, video and screen sharing over LiveKit",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
@@ -67,6 +67,7 @@
     "@orpc/contract": "^1.15.0",
     "@orpc/server": "^1.15.0",
     "drizzle-orm": "^0.45.0",
+    "livekit-client": "^2.22.0",
     "livekit-server-sdk": "^2.18.0",
     "zod": "^4.1.0"
   },
