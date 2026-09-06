@@ -1,5 +1,11 @@
 # @kernhq/module-meet
 
+## 0.2.5
+
+### Patch Changes
+
+- chore: check the packed tarball can resolve its own imports
+
 ## 0.2.4
 
 ### Patch Changes
