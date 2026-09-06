@@ -41,7 +41,7 @@ importers:
         specifier: ^0.10.0
         version: 0.10.1(@types/pg@8.23.1)
       '@kernhq/testing':
-        specifier: ^0.1.12
+        specifier: ^0.1.14
         version: 0.1.14
       '@kernhq/tsconfig':
         specifier: ^0.1.0
