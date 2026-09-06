@@ -87,7 +87,7 @@ export const en: Record<string, Message> = {
   'meet.reconnecting_desc': 'The connection dropped. Everyone stays where they are while it comes back.',
   'meet.ended_title': 'This meeting has ended',
   'meet.ended_desc': 'Everybody has left. Start another one whenever you like.',
-  'meet.ended_back': 'Back to your workspace',
+  'meet.back_to_workspace': 'Back to your workspace',
   'meet.failed_title': 'The call could not connect',
   'meet.failed_desc':
     'Your network blocked the connection; UDP to this server appears to be closed. Kern falls back to TCP, and a network that allows nothing but web traffic will stop that too.',
@@ -186,7 +186,7 @@ export const ar: Record<string, Message> = {
   'meet.reconnecting_desc': 'انقطع الاتصال. يبقى الجميع في أماكنهم حتى يعود.',
   'meet.ended_title': 'انتهى هذا الاجتماع',
   'meet.ended_desc': 'غادر الجميع. ابدأ اجتماعًا آخر متى شئت.',
-  'meet.ended_back': 'العودة إلى مساحة العمل',
+  'meet.back_to_workspace': 'العودة إلى مساحة العمل',
   'meet.failed_title': 'تعذّر إجراء المكالمة',
   'meet.failed_desc':
     'حجبت شبكتك الاتصال؛ يبدو أن منفذ UDP إلى هذا الخادم مغلق. يلجأ Kern عندها إلى TCP، وشبكة لا تسمح إلا بحركة الويب ستمنع ذلك أيضًا.',
@@ -274,7 +274,7 @@ export const de: Record<string, Message> = {
   'meet.reconnecting_desc': 'Die Verbindung ist abgerissen. Alle bleiben, wo sie sind, bis sie zurück ist.',
   'meet.ended_title': 'Diese Besprechung ist beendet',
   'meet.ended_desc': 'Alle haben sie verlassen. Starten Sie jederzeit eine neue.',
-  'meet.ended_back': 'Zurück zum Arbeitsbereich',
+  'meet.back_to_workspace': 'Zurück zum Arbeitsbereich',
   'meet.failed_title': 'Die Verbindung kam nicht zustande',
   'meet.failed_desc':
     'Ihr Netzwerk hat die Verbindung blockiert; UDP zu diesem Server scheint gesperrt zu sein. Kern weicht dann auf TCP aus, und ein Netzwerk, das nur Web-Verkehr zulässt, blockiert auch das.',
@@ -365,7 +365,7 @@ export const fa: Record<string, Message> = {
   'meet.reconnecting_desc': 'اتصال قطع شد. تا بازگشتش همه سر جای خود می‌مانند.',
   'meet.ended_title': 'این جلسه به پایان رسید',
   'meet.ended_desc': 'همه بیرون رفته‌اند. هر وقت خواستید جلسه‌ای تازه شروع کنید.',
-  'meet.ended_back': 'بازگشت به فضای کاری',
+  'meet.back_to_workspace': 'بازگشت به فضای کاری',
   'meet.failed_title': 'تماس برقرار نشد',
   'meet.failed_desc':
     'شبکهٔ شما اتصال را بست؛ به نظر می‌رسد UDP به این کارساز باز نیست. کِرن آن‌گاه به TCP پناه می‌برد، و شبکه‌ای که جز ترافیک وب چیزی را نمی‌پذیرد جلوی آن را هم می‌گیرد.',
@@ -455,7 +455,7 @@ export const tr: Record<string, Message> = {
   'meet.reconnecting_desc': 'Bağlantı koptu. Geri gelene kadar herkes yerinde kalır.',
   'meet.ended_title': 'Bu toplantı bitti',
   'meet.ended_desc': 'Herkes ayrıldı. İstediğiniz zaman yenisini başlatın.',
-  'meet.ended_back': 'Çalışma alanına dön',
+  'meet.back_to_workspace': 'Çalışma alanına dön',
   'meet.failed_title': 'Görüşme bağlanamadı',
   'meet.failed_desc':
     'Ağınız bağlantıyı engelledi; bu sunucuya UDP kapalı görünüyor. Kern bunun üzerine TCP’ye düşer ve yalnızca web trafiğine izin veren bir ağ onu da keser.',

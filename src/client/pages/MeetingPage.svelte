@@ -174,11 +174,15 @@ $effect(() => {
   untrack(() => {
     if (meetingSession.meetingId !== id) void meetingSession.leave()
     if (!auto || meetingSession.status !== 'idle') return
-    // The signed-in person's own name, not "You": a real tile carries whatever the token said, and
-    // a demo whose local tile is labelled differently from every other one demonstrates the wrong
-    // thing. The rail is where "· You" is added, exactly as it is in a real meeting.
-    if (isDemo) meetingSession.startDemo(id, mockTiles(myName), mockMessages())
-    else void join({ microphone: true, camera: true, cameraId: null, microphoneId: null, speakerId: null })
+    /*
+     * Through `join()`, in the demo as well — **never straight to `startDemo`**.
+     *
+     * Skipping the call is how a meeting that does not exist came to render three fixture faces:
+     * the mock answers `NOT_FOUND` for any id but its own, and a branch that never asks never hears
+     * it. Measured on 2026-09-06 by opening a made-up id with `?join=1` and being shown a meeting.
+     * There is one join path for the same reason there is one place a token is minted.
+     */
+    void join({ microphone: true, camera: true, cameraId: null, microphoneId: null, speakerId: null })
   })
   return () => {
     void meetingSession.leave()
@@ -213,7 +217,10 @@ async function join(choice: JoinChoice) {
       // Still a real call: the mock answers NOT_FOUND for any id but its own, so the 404 branch is
       // reachable in the demo rather than only against a server.
       await api.meetings.join({ workspaceId, meetingId })
-      meetingSession.startDemo(meetingId, mockTiles(t('you')), mockMessages())
+      // The signed-in person's own name rather than "You": a real tile carries whatever the token
+      // said, and a demo whose local tile is labelled differently from every other one demonstrates
+      // the wrong thing. The participant list is where "· You" is added, as it is in a real meeting.
+      meetingSession.startDemo(meetingId, mockTiles(myName), mockMessages())
       return
     }
     const admitted = await api.meetings.join({ workspaceId, meetingId })
@@ -335,7 +342,11 @@ function chooseDevice(kind: DeviceKind, deviceId: string) {
       {/snippet}
     </EmptyState>
   {:else if screen === 'not_found'}
-    <EmptyState icon="circle-x" title={t('not_found_title')} description={t('not_found_desc')} />
+    <EmptyState icon="circle-x" title={t('not_found_title')} description={t('not_found_desc')}>
+      {#snippet actions()}
+        <Button variant="secondary" href={`/${workspaceSlug}`}>{t('back_to_workspace')}</Button>
+      {/snippet}
+    </EmptyState>
   {:else if screen === 'denied'}
     <!--
       A screen and not a toast. Re-granting a camera permission is three steps in a menu the reader
@@ -387,7 +398,7 @@ function chooseDevice(kind: DeviceKind, deviceId: string) {
   {:else if screen === 'ended'}
     <EmptyState icon="circle-check" title={t('ended_title')} description={t('ended_desc')}>
       {#snippet actions()}
-        <Button variant="secondary" href={`/${workspaceSlug}`}>{t('ended_back')}</Button>
+        <Button variant="secondary" href={`/${workspaceSlug}`}>{t('back_to_workspace')}</Button>
       {/snippet}
     </EmptyState>
   {:else if screen === 'error'}
