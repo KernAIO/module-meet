@@ -1,6 +1,6 @@
 {
   "name": "@kernhq/module-meet",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Meetings module for Kern — audio, video and screen sharing over LiveKit",
   "license": "AGPL-3.0-only",
   "repository": {
